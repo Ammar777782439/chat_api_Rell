@@ -1,5 +1,7 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class Message(models.Model):
     """
@@ -45,7 +47,7 @@ class Message(models.Model):
             models.Index(fields=['sender', 'receiver']),  # Index for faster queries
             models.Index(fields=['timestamp']),  # Index for timestamp-based sorting
         ]
-     
+
     def __str__(self):
         """
         String representation of the Message object.

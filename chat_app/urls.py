@@ -19,15 +19,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('users.urls')),
+    path('users/', include('users.urls')),
     path('', include('chat.urls')),
-    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
-    path('social-auth/', include('social_django.urls', namespace='social')),
 ]
-
-
-
-
-#  login endpoint
-
-# http://127.0.0.1:8000/social-auth/login/google-oauth2/

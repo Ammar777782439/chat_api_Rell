@@ -1,153 +1,126 @@
+from chat.models import Message
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
-from django.contrib.auth import authenticate, login, logout
-from django.contrib import messages
-from social_django.utils import load_strategy, load_backend
-from social_core.exceptions import MissingBackend, AuthFailed
-from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+import requests
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from social_django.models import UserSocialAuth
+from django.conf import settings
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
-def home_view(request):
-    """View for the home page that redirects to login if not authenticated."""
-    if request.user.is_authenticated:
-        # Get a valid user to chat with or redirect to the first available user
-        other_users = User.objects.exclude(id=request.user.id)
-        if other_users.exists():
-            return redirect(f'/chat/{other_users.first().username}/')
-        else:
-            # If no other users, redirect to their own chat (for UI display)
-            return redirect(f'/chat/{request.user.username}/')
-    else:
-        return redirect('login')
+from .models import CustomUser
+from rest_framework_simplejwt.tokens import RefreshToken
 
+class GoogleLoginView(APIView):
+    def post(self, request):
+        token = request.data.get('token')
+        try:
+            # محاولة التحقق من ID token أولاً
+            try:
+                id_info = id_token.verify_oauth2_token(
+                    token,
+                    google_requests.Request(),
+                    settings.GOOGLE_CLIENT_ID
+                )
+                if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                    raise ValueError('Invalid issuer.')
 
+                email = id_info['email']
+                google_id = id_info['sub']
+                avatar = id_info.get('picture')
 
+            except Exception as e:
+                # إذا فشل التحقق من ID token، حاول استخدام access token
+                headers = {'Authorization': f'Bearer {token}'}
+                userinfo_response = requests.get('https://www.googleapis.com/oauth2/v3/userinfo', headers=headers)
 
+                if not userinfo_response.ok:
+                    raise ValueError('Invalid token or failed to get user info')
 
+                userinfo = userinfo_response.json()
+                email = userinfo['email']
+                google_id = userinfo['sub']
+                avatar = userinfo.get('picture')
 
+            # إنشاء أو استرجاع المستخدم
+            user, created = CustomUser.objects.get_or_create(
+                email=email,
+                defaults={
+                    'username': email,
+                    'google_id': google_id,
+                    'avatar': avatar,
+                }
+            )
+
+            # إنشاء رموز JWT
+            refresh = RefreshToken.for_user(user)
+            print(refresh)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class GoogleCallbackView(APIView):
+    def get(self, request):
+        code = request.GET.get('code')
+        if not code:
+            return Response({'error': 'No authorization code provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Exchange authorization code for access token
+        token_url = 'https://oauth2.googleapis.com/token'
+        data = {
+            'code': code,
+            'client_id': settings.GOOGLE_CLIENT_ID,
+            'client_secret': settings.GOOGLE_CLIENT_SECRET,
+            'redirect_uri': 'http://localhost:8000/users/api/auth/google/callback/',
+            'grant_type': 'authorization_code'
+        }
+
+        response = requests.post(token_url, data=data)
+        if not response.ok:
+            return Response({'error': 'Failed to exchange code for token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        token_data = response.json()
+        access_token = token_data.get('access_token')
+
+        # Get user info using access token
+        userinfo_url = 'https://www.googleapis.com/oauth2/v3/userinfo'
+        headers = {'Authorization': f'Bearer {access_token}'}
+        userinfo_response = requests.get(userinfo_url, headers=headers)
+
+        if not userinfo_response.ok:
+            return Response({'error': 'Failed to get user info'}, status=status.HTTP_400_BAD_REQUEST)
+
+        userinfo = userinfo_response.json()
+
+        # Get or create user
+        user, created = CustomUser.objects.get_or_create(
+            email=userinfo['email'],
+            defaults={
+                'username': userinfo['email'],
+                'google_id': userinfo['sub'],
+                'avatar': userinfo.get('picture'),
+            }
+        )
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        print(refresh)
+        # Redirect to home page with tokens as URL parameters
+        redirect_url = f'/?access_token={str(refresh.access_token)}&refresh_token={str(refresh)}'
+        return HttpResponseRedirect(redirect_url)
+
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def chat_view(request):
+    messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
+    return render(request, 'chat.html', {'messages': messages})
 
 def login_view(request):
-    if request.user.is_authenticated:
-        # Reuse the same redirection logic as home_view
-        other_users = User.objects.exclude(id=request.user.id)
-        if other_users.exists():
-            return redirect(f'/chat/{other_users.first().username}/')
-        else:
-            return redirect(f'/chat/{request.user.username}/')
-
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-            # Redirect to chat with another user or self
-            other_users = User.objects.exclude(id=user.id)
-            if other_users.exists():
-                return redirect(f'/chat/{other_users.first().username}/')
-            else:
-                return redirect(f'/chat/{user.username}/')
-        else:
-            messages.error(request, 'Invalid username or password.')
-
     return render(request, 'login.html')
-
-def register_view(request):
-    if request.user.is_authenticated:
-        # Reuse the same redirection logic
-        other_users = User.objects.exclude(id=request.user.id)
-        if other_users.exists():
-            return redirect(f'/chat/{other_users.first().username}/')
-        else:
-            return redirect(f'/chat/{request.user.username}/')
-
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password1 = request.POST.get('password1')
-        password2 = request.POST.get('password2')
-
-        if password1 != password2:
-            messages.error(request, 'Passwords do not match.')
-            return render(request, 'register.html')
-
-        try:
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password1,
-                first_name=request.POST.get('first_name', ''),
-                last_name=request.POST.get('last_name', '')
-            )
-            # تحديد الـ backend عند تسجيل الدخول
-            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-            # Redirect to chat with another user or self
-            other_users = User.objects.exclude(id=user.id)
-            if other_users.exists():
-                return redirect(f'/chat/{other_users.first().username}/')
-            else:
-                return redirect(f'/chat/{user.username}/')
-        except Exception as e:
-            messages.error(request, str(e))
-
-    return render(request, 'register.html')
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_auth_token(request):
-    """Get or create an authentication token for the current user."""
-    token, created = Token.objects.get_or_create(user=request.user)
-    return Response({'token': token.key})
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def obtain_auth_token(request):
-    """API endpoint that accepts username/email and password and returns an auth token."""
-    username = request.data.get('username')
-    password = request.data.get('password')
-    is_oauth = request.data.get('oauth') == 'true'
-
-    # Check if username is actually an email
-    if '@' in username:
-        try:
-            user = User.objects.get(email=username)
-            username = user.username
-        except User.DoesNotExist:
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    # Try to find the user
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    # If OAuth flag is set, check if user has a Google OAuth account
-    if is_oauth:
-        try:
-            social_auth = UserSocialAuth.objects.get(user=user)
-            if social_auth.provider == 'google-oauth2':
-                # This is a Google OAuth user, create a token
-                token, created = Token.objects.get_or_create(user=user)
-                return Response({'token': token.key}, status=status.HTTP_200_OK)
-            else:
-                return Response({'error': 'User is not authenticated with Google'}, status=status.HTTP_401_UNAUTHORIZED)
-        except UserSocialAuth.DoesNotExist:
-            return Response({'error': 'User is not authenticated with Google'}, status=status.HTTP_401_UNAUTHORIZED)
-    else:
-        # Standard authentication
-        authenticated_user = authenticate(username=username, password=password)
-
-        if authenticated_user:
-            token, created = Token.objects.get_or_create(user=authenticated_user)
-            return Response({'token': token.key}, status=status.HTTP_200_OK)
-        else:
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)

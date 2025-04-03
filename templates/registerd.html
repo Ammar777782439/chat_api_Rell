@@ -5,20 +5,8 @@
 {% block content %}
 <div class="max-w-md mx-auto bg-white rounded-lg shadow-lg p-8">
     <h2 class="text-2xl font-bold text-center mb-8 text-gray-800">Create an Account</h2>
-    
-    <a href="{% url 'social:begin' 'google-oauth2' %}" class="flex items-center justify-center w-full bg-white border border-gray-300 rounded-lg px-4 py-3 mb-6 hover:bg-gray-50 transition duration-200">
-        <img src="https://www.google.com/favicon.ico" alt="Google" class="w-6 h-6 mr-2">
-        <span class="text-gray-700">Sign up with Google</span>
-    </a>
-    
-    <div class="relative my-6">
-        <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-gray-300"></div>
-        </div>
-        <div class="relative flex justify-center text-sm">
-            <span class="px-2 bg-white text-gray-500">Or register with email</span>
-        </div>
-    </div>
+
+
 
     <form method="post" class="space-y-4">
         {% csrf_token %}
@@ -34,31 +22,31 @@
                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
             </div>
         </div>
-        
+
         <div>
             <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
             <input type="email" name="email" id="email" required
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
         </div>
-        
+
         <div>
             <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
             <input type="text" name="username" id="username" required
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
         </div>
-        
+
         <div>
             <label for="password1" class="block text-sm font-medium text-gray-700">Password</label>
             <input type="password" name="password1" id="password1" required
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
         </div>
-        
+
         <div>
             <label for="password2" class="block text-sm font-medium text-gray-700">Confirm Password</label>
             <input type="password" name="password2" id="password2" required
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
         </div>
-        
+
         <div class="flex items-center">
             <input type="checkbox" name="terms" id="terms" required
                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
@@ -67,13 +55,13 @@
                 <a href="#" class="text-blue-600 hover:text-blue-500">Privacy Policy</a>
             </label>
         </div>
-        
+
         <button type="submit"
                 class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
             Create Account
         </button>
     </form>
-    
+
     <p class="mt-6 text-center text-sm text-gray-600">
         Already have an account?
         <a href="{% url 'login' %}" class="font-medium text-blue-600 hover:text-blue-500">Sign in</a>

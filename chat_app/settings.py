@@ -42,7 +42,14 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
+# استبدل هذه القيم بمعرف العميل وسر العميل الجديدين الذي حصلت عليهما من Google Cloud Console
+GOOGLE_CLIENT_ID = '703343096208-5p7qihj8mtv3kmnal92flgnuotl52h63.apps.googleusercontent.com'
+GOOGLE_CLIENT_SECRET = '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'
+
 # Application definition
+
+
+AUTH_USER_MODEL = 'users.CustomUser'
 
 INSTALLED_APPS = [
     'daphne',
@@ -53,23 +60,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'chat',
     'users',
+    'chat',
+    
     "rest_framework",
-    "rest_framework.authtoken",  # Add this for token authentication
     "corsheaders",
-    "social_django",  # Google OAuth
 ]
 
-INSTALLED_APPS += [
-
-    'oauth2_provider',
-]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
-        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
@@ -81,10 +81,7 @@ REST_FRAMEWORK = {
     'CSRF_USE_SESSIONS': False
 }
 
-# OAuth2 settings
-OAUTH2_PROVIDER = {
-    'SCOPES': {'read': 'Read scope', 'write': 'Write scope'}
-}
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -109,8 +106,6 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'social_django.context_processors.backends',
-                'social_django.context_processors.login_redirect',
             ],
         },
     },
@@ -179,28 +174,8 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '58335703471-l58a73o7u3f8kst6osh39g412q71khei.apps.googleusercontent.com'
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = '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'
-
-# Add these settings
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/'  # Redirect to home view which will handle finding a valid chat
-SOCIAL_AUTH_LOGIN_ERROR_URL = '/login/'
-
 AUTHENTICATION_BACKENDS = (
-    'social_core.backends.google.GoogleOAuth2',
     'django.contrib.auth.backends.ModelBackend',
-)
-
-SOCIAL_AUTH_PIPELINE = (
-    'social_core.pipeline.social_auth.social_details',
-    'social_core.pipeline.social_auth.social_uid',
-    'social_core.pipeline.social_auth.auth_allowed',
-    'social_core.pipeline.social_auth.social_user',
-    'social_core.pipeline.user.get_username',
-    'social_core.pipeline.user.create_user',
-    'social_core.pipeline.social_auth.associate_user',
-    'social_core.pipeline.social_auth.load_extra_data',
-    'social_core.pipeline.user.user_details',
 )
 
 

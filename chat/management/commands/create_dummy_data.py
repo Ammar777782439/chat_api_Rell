@@ -5,7 +5,6 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from chat.models import Message
 from faker import Faker
-from rest_framework.authtoken.models import Token
 
 class Command(BaseCommand):
     help = 'Creates dummy users and messages for testing'
@@ -40,20 +39,11 @@ class Command(BaseCommand):
                 email='admin@example.com',
                 password='admin123'
             )
-            # Create token for admin user
-            token, created = Token.objects.get_or_create(user=admin)
             users.append(admin)
             self.stdout.write(self.style.SUCCESS(f'Created admin user: admin / admin123'))
-            self.stdout.write(self.style.SUCCESS(f'Created token for admin: {token.key}'))
         else:
             admin = User.objects.get(username='admin')
-            # Create or get token for existing admin
-            token, created = Token.objects.get_or_create(user=admin)
             users.append(admin)
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created token for admin: {token.key}'))
-            else:
-                self.stdout.write(self.style.SUCCESS(f'Using existing token for admin: {token.key}'))
 
         # Create regular users
         for i in range(num_users):
@@ -69,11 +59,8 @@ class Command(BaseCommand):
                     first_name=first_name,
                     last_name=last_name
                 )
-                # Create token for user
-                token, created = Token.objects.get_or_create(user=user)
                 users.append(user)
                 self.stdout.write(self.style.SUCCESS(f'Created user: {username} / 123'))
-                self.stdout.write(self.style.SUCCESS(f'Created token for {username}: {token.key}'))
 
         # Create messages
         self.stdout.write(self.style.NOTICE(f'Creating {num_messages} dummy messages...'))
@@ -119,5 +106,4 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('You can login with any of these accounts:'))
         self.stdout.write(self.style.NOTICE('Admin: admin / admin123'))
         self.stdout.write(self.style.NOTICE('Users: [username] / password123'))
-        self.stdout.write(self.style.NOTICE('Authentication tokens have been created for all users'))
-        self.stdout.write(self.style.NOTICE('You can view your token at: http://127.0.0.1:8000/api/token/ after login'))
+
