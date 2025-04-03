@@ -1,7 +1,7 @@
 import random
 from datetime import timedelta
 from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from django.utils import timezone
 from chat.models import Message
 from faker import Faker
@@ -24,7 +24,7 @@ class Command(BaseCommand):
         if clear_data:
             self.stdout.write(self.style.WARNING('Clearing existing data...'))
             # Only delete non-superuser accounts
-            User.objects.filter(is_superuser=False).delete()
+            CustomUser.objects.filter(is_superuser=False).delete()
             Message.objects.all().delete()
             self.stdout.write(self.style.SUCCESS('Existing data cleared!'))
 
@@ -33,8 +33,8 @@ class Command(BaseCommand):
         users = []
 
         # Check if admin user exists, if not create one
-        if not User.objects.filter(username='admin').exists():
-            admin = User.objects.create_superuser(
+        if not CustomUser.objects.filter(username='admin').exists():
+            admin = CustomUser.objects.create_superuser(
                 username='admin',
                 email='admin@example.com',
                 password='admin123'
@@ -42,7 +42,7 @@ class Command(BaseCommand):
             users.append(admin)
             self.stdout.write(self.style.SUCCESS(f'Created admin user: admin / admin123'))
         else:
-            admin = User.objects.get(username='admin')
+            admin = CustomUser.objects.get(username='admin')
             users.append(admin)
 
         # Create regular users
@@ -51,8 +51,8 @@ class Command(BaseCommand):
             last_name = fake.last_name()
             username = f"{first_name.lower()}{i}"
 
-            if not User.objects.filter(username=username).exists():
-                user = User.objects.create_user(
+            if not CustomUser.objects.filter(username=username).exists():
+                user = CustomUser.objects.create_user(
                     username=username,
                     email=f"{username}@example.com",
                     password="123",
@@ -67,7 +67,7 @@ class Command(BaseCommand):
 
         # Get all users if we need more than the ones we just created
         if len(users) < 2:
-            users = list(User.objects.all())
+            users = list(CustomUser.objects.all())
 
         now = timezone.now()
 

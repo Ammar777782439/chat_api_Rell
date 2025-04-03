@@ -62,7 +62,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'users',
     'chat',
-    
+
     "rest_framework",
     "corsheaders",
 ]
@@ -78,7 +78,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
     'CSRF_COOKIE_SECURE': False,  # Set to True in production with HTTPS
-    'CSRF_USE_SESSIONS': False
+    'CSRF_USE_SESSIONS': False,
+    'UNAUTHENTICATED_USER': None  # السماح بالوصول بدون مصادقة لبعض المسارات
 }
 
 
@@ -87,7 +88,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',  # يمكن تجاوزه باستخدام @csrf_exempt
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

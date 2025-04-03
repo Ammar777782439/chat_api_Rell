@@ -9,7 +9,7 @@ The views handle user authentication, message filtering, pagination, and WebSock
 
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from django.http import JsonResponse
 from django.db.models import Q
 from django.utils import timezone
@@ -26,6 +26,24 @@ from rest_framework.permissions import IsAuthenticated
 
 from chat.serializers import MessageSerializer
 from .models import Message
+
+def home_view(request):
+    # Check if access token is in URL parameters
+    access_token = request.GET.get('access_token')
+    refresh_token = request.GET.get('refresh_token')
+
+    # If tokens are present, store them in session
+    if access_token and refresh_token:
+        request.session['access_token'] = access_token
+        request.session['refresh_token'] = refresh_token
+
+    # Get messages
+    messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
+
+    # We don't check authentication here anymore since we're using client-side auth check
+    # The JavaScript in the template will handle redirecting unauthenticated users
+
+    return render(request, 'chat.html', {'messages': messages})
 
 # نمط التصميم facory
 class MessagePagination(PageNumberPagination):
@@ -109,9 +127,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         receiver_username = self.request.data.get('receiver')
 
         try:
-            receiver = User.objects.get(id=receiver_username)
+            receiver = CustomUser.objects.get(id=receiver_username)
             serializer.save(sender=self.request.user, receiver=receiver)
-        except User.DoesNotExist:
+        except CustomUser.DoesNotExist:
             raise serializers.ValidationError("Receiver not found")
 
     @action(detail=True, methods=['delete'])
@@ -196,7 +214,7 @@ def chat_room(request, room_name):
     search_query = request.GET.get('search', '')
 
     # Get all users except the current user for the sidebar
-    users = User.objects.exclude(id=request.user.id)
+    users = CustomUser.objects.exclude(id=request.user.id)
 
     # Get messages between the current user and the specified user
     chats = Message.objects.filter(

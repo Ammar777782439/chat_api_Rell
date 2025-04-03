@@ -1,6 +1,6 @@
 from django.test import TestCase, Client, TransactionTestCase
 from django.urls import reverse
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from chat.models import Message
@@ -17,11 +17,11 @@ class MessageViewSetTest(APITestCase):
         """إعداد البيانات اللي بنستخدمها في الاختبارات"""
 
         # إنشاء مستخدمين للتجربة
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='user1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='user2',
             password='testpass123'
         )
@@ -94,11 +94,11 @@ class ChatRoomViewTest(TestCase):
         """إعداد بيانات الاختبار الخاصة بغرف الدردشة"""
 
         # إنشاء مستخدمين للتجربة
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='user1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='user2',
             password='testpass123'
         )
@@ -137,11 +137,11 @@ class MessageModelTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='testuser1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='testuser2',
             password='testpass123'
         )
@@ -169,11 +169,11 @@ class MessageSerializerTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='testuser1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='testuser2',
             password='testpass123'
         )
@@ -212,7 +212,7 @@ class WebSocketTests(TransactionTestCase):
 
     @database_sync_to_async
     def create_user(self, username, password):
-        return User.objects.create_user(username=username, password=password)
+        return CustomUser.objects.create_user(username=username, password=password)
 
     @database_sync_to_async
     def create_message(self, sender, receiver, content):
