@@ -128,6 +128,7 @@ class GoogleCallbackView(APIView):
             userinfo_url = 'https://www.googleapis.com/oauth2/v3/userinfo'
             headers = {'Authorization': f'Bearer {access_token}'}
             print("Getting user info...")
+            print(access_token)
             userinfo_response = requests.get(userinfo_url, headers=headers)
 
             if not userinfo_response.ok:
@@ -185,3 +186,36 @@ def chat_view(request):
 
 def login_view(request):
     return render(request, 'login.html')
+
+class GoogleUserTokenView(APIView):
+    """
+    API view to get tokens for Google-authenticated users using their email.
+    """
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Find the user by email
+            user = CustomUser.objects.get(email=email)
+            
+            # Check if the user has a google_id (was authenticated via Google)
+            if not user.google_id:
+                return Response({'error': 'User was not authenticated via Google'}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+            
+            # Generate tokens
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email
+                }
+            })
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)

@@ -8,7 +8,7 @@ router = DefaultRouter()
 router.register(r'messages', views.MessageViewSet, basename='message')
 
 urlpatterns = [
-    path('', views.home_view, name='home'),
+    # path('', views.home_view, name='home'),
     path('api/', include(router.urls)),
     path('chat/<str:room_name>/', views.chat_room, name='chat'),
 ]

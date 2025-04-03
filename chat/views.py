@@ -19,7 +19,7 @@ from rest_framework import serializers
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics, permissions, pagination
 from rest_framework.decorators import action
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -27,23 +27,23 @@ from rest_framework.permissions import IsAuthenticated
 from chat.serializers import MessageSerializer
 from .models import Message
 
-def home_view(request):
-    # Check if access token is in URL parameters
-    access_token = request.GET.get('access_token')
-    refresh_token = request.GET.get('refresh_token')
+# def home_view(request):
+#     # Check if access token is in URL parameters
+#     access_token = request.GET.get('access_token')
+#     refresh_token = request.GET.get('refresh_token')
 
-    # If tokens are present, store them in session
-    if access_token and refresh_token:
-        request.session['access_token'] = access_token
-        request.session['refresh_token'] = refresh_token
+#     # If tokens are present, store them in session
+#     if access_token and refresh_token:
+#         request.session['access_token'] = access_token
+#         request.session['refresh_token'] = refresh_token
 
-    # Get messages
-    messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
+#     # Get messages
+#     messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
 
-    # We don't check authentication here anymore since we're using client-side auth check
-    # The JavaScript in the template will handle redirecting unauthenticated users
+#     # We don't check authentication here anymore since we're using client-side auth check
+#     # The JavaScript in the template will handle redirecting unauthenticated users
 
-    return render(request, 'chat.html', {'messages': messages})
+#     return render(request, 'chat.html', {'messages': messages})
 
 # نمط التصميم facory
 class MessagePagination(PageNumberPagination):
@@ -78,10 +78,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         pagination_class: The pagination class used for paginating message lists.
     """
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = MessagePagination
-    authentication_classes = [TokenAuthentication, SessionAuthentication]
-
+    
     def get_queryset(self):
         """
         Get the queryset of messages for the current user.
