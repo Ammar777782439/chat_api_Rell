@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os # إضافة استيراد مكتبة os
 from pathlib import Path
 from django.contrib.messages import constants as messages
 
@@ -42,9 +43,9 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
-# استبدل هذه القيم بمعرف العميل وسر العميل الجديدين الذي حصلت عليهما من Google Cloud Console
-GOOGLE_CLIENT_ID = '703343096208-5p7qihj8mtv3kmnal92flgnuotl52h63.apps.googleusercontent.com'
-GOOGLE_CLIENT_SECRET = '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'
+# اقرأ بيانات اعتماد Google OAuth من متغيرات البيئة
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 
 # Application definition
 
