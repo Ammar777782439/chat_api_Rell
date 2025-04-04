@@ -14,10 +14,24 @@ from .models import CustomUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny
 from django.contrib.auth import login
+# Import csrf_exempt and method_decorator if they are not already imported elsewhere
+# (Assuming they might be needed for GoogleCallbackView as well)
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
+
+@method_decorator(csrf_exempt, name='dispatch')
 class GoogleLoginView(APIView):
+    """
+    API view for handling Google OAuth login.
+
+    This view accepts a Google OAuth token and returns JWT tokens for authentication.
+
+    Endpoints:
+        POST /users/api/auth/google/: Authenticate with Google OAuth token
+            - Required fields: token (Google OAuth token)
+            - Returns: refresh token, access token, and user information
+    """
     permission_classes = [AllowAny]  # السماح بالوصول بدون مصادقة
 
     def post(self, request):
@@ -68,10 +82,7 @@ class GoogleLoginView(APIView):
             print(f"User authenticated: {user.username} (ID: {user.id})")
 
             # تسجيل الدخول للمستخدم
-            from django.contrib.auth import login
-            login(request, user)
-            print(f"User logged in: {user.username}")
-
+            
             # إنشاء رموز JWT
             refresh = RefreshToken.for_user(user)
 
@@ -84,6 +95,17 @@ class GoogleLoginView(APIView):
                     'email': user.email
                 }
             })
+            # The following code was unreachable because it came after 'return Response'
+            # other_users = CustomUser.objects.exclude(id=user.id).first()
+            # chat_username = other_users.username if other_users else user.username
+            # print(f"Chat with: {chat_username}")
+            #
+            # # إنشاء URL مباشرة لصفحة الدردشة
+            # chat_url = f'/chat/{chat_username}/'
+            # print(f"Redirecting to: {chat_url}")
+            #
+            # # إعادة توجيه المستخدم إلى صفحة الدردشة
+            # return HttpResponseRedirect(chat_url)
         except Exception as e:
             error_msg = f"Error in Google login: {str(e)}"
             print(error_msg)
@@ -93,6 +115,18 @@ class GoogleLoginView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class GoogleCallbackView(APIView):
+    """
+    API view for handling Google OAuth callback.
+
+    This view handles the callback from Google OAuth authentication process.
+    It exchanges the authorization code for an access token, retrieves user information,
+    creates or retrieves the user, and redirects to the chat page.
+
+    Endpoints:
+        GET /users/api/auth/google/callback/: Handle Google OAuth callback
+            - Required query parameters: code (authorization code from Google)
+            - Redirects to: /chat/{username}/ after successful authentication
+    """
     permission_classes = [AllowAny]  # السماح بالوصول بدون مصادقة
     authentication_classes = []  # لا تتطلب أي مصادقة
     def get(self, request):
@@ -181,33 +215,64 @@ from django.contrib.auth.decorators import login_required
 
 @login_required
 def chat_view(request):
+    """
+    View function for rendering the chat interface.
+
+    This view displays the chat interface with the most recent messages.
+    It requires the user to be authenticated.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        HttpResponse: Rendered chat.html template with context data.
+    """
     messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
     return render(request, 'chat.html', {'messages': messages})
 
 def login_view(request):
+    """
+    View function for rendering the login page.
+
+    This view displays the login page with options to authenticate using Google OAuth.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        HttpResponse: Rendered login.html template.
+    """
     return render(request, 'login.html')
 
 class GoogleUserTokenView(APIView):
     """
     API view to get tokens for Google-authenticated users using their email.
+
+    This view allows Google-authenticated users to obtain JWT tokens by providing their email.
+    It verifies that the user was previously authenticated via Google before issuing tokens.
+
+    Endpoints:
+        POST /users/api/google-token/: Get JWT tokens using email
+            - Required fields: email (user's email address)
+            - Returns: refresh token, access token, and user information
     """
     def post(self, request):
         email = request.data.get('email')
         if not email:
             return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             # Find the user by email
             user = CustomUser.objects.get(email=email)
-            
+
             # Check if the user has a google_id (was authenticated via Google)
             if not user.google_id:
-                return Response({'error': 'User was not authenticated via Google'}, 
+                return Response({'error': 'User was not authenticated via Google'},
                                status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Generate tokens
             refresh = RefreshToken.for_user(user)
-            
+
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),

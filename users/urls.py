@@ -7,9 +7,14 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 urlpatterns = [
     path('profile/', views.chat_view, name='chat'),
     path('login/', views.login_view, name='login'),
+    
     path('logout/', LogoutView.as_view(next_page='/'), name='logout'),
+    #google_login نقطه ترجع توكن لاستخدامها في تطبيقات اخري 
     path('api/auth/google/', views.GoogleLoginView.as_view(), name='google_login'),
+    # تسجيل الدخول باستخدام حساب جوجل
     path('api/auth/google/callback/', views.GoogleCallbackView.as_view(), name='google_callback'),
+
+
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),

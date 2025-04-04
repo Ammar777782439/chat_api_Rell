@@ -10,3 +10,5 @@ coverage>=5.5
 pytest>=6.2.0
 pytest-django>=4.4.0
 pytest-asyncio>=0.15.0
+coreapi>=2.3.3
+drf-yasg>=1.20.0

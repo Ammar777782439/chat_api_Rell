@@ -7,9 +7,12 @@ WebSocket connections, message sending/receiving, and database operations.
 
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
 from users.models import CustomUser
 from .models import Message
 from asgiref.sync import sync_to_async
+from django.utils import timezone
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -232,12 +235,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         delete an existing message in the database.
         """
         try:
-            # البحث عن الرسالة والتأكد من ملكية المرسل لها
-            message = Message.objects.get(id=message_id, sender=sender)
-
-            message.delete()
+           
+            message = Message.objects.get(id=message_id, sender=sender, deleted_at__isnull=True)
+            
+            message.deleted_at = timezone.now()
+            message.save(update_fields=['deleted_at'])
+            print(f"Soft deleted message ID: {message_id} by sender: {sender.username}")
             return True
         except Message.DoesNotExist:
+            print(f"Message ID: {message_id} not found or already deleted for sender: {sender.username}")
             return False
 
     @sync_to_async

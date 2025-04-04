@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "drf_yasg",
 ]
 
 
@@ -81,7 +82,8 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
     'CSRF_COOKIE_SECURE': False,  # Set to True in production with HTTPS
     'CSRF_USE_SESSIONS': False,
-    'UNAUTHENTICATED_USER': None  # السماح بالوصول بدون مصادقة لبعض المسارات
+    'UNAUTHENTICATED_USER': None,  # السماح بالوصول بدون مصادقة لبعض المسارات
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
 }
 
 
@@ -94,6 +96,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware', 
 ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
