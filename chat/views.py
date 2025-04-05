@@ -26,6 +26,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from chat.serializers import MessageSerializer
 from .models import Message
+from chat.kafka_producer import KafkaProducerService
 
 # def home_view(request):
 #     # Check if access token is in URL parameters
@@ -143,6 +144,10 @@ class MessageViewSet(viewsets.ModelViewSet):
             serializer.save(sender=self.request.user, receiver=receiver)
         except CustomUser.DoesNotExist:
             raise serializers.ValidationError("Receiver not found")
+
+        # Send message to Kafka
+        producer_service = KafkaProducerService(bootstrap_servers=['192.168.117.128:9094'])
+        producer_service.send_message('chat_messages', {'sender': str(self.request.user.id), 'receiver': str(receiver.id), 'content': serializer.validated_data['content']})
 
     @action(detail=True, methods=['delete'])
     def delete_message(self, request, pk=None):

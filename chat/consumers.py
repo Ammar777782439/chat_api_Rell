@@ -7,12 +7,31 @@ WebSocket connections, message sending/receiving, and database operations.
 
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
-import json
-from channels.generic.websocket import AsyncWebsocketConsumer
 from users.models import CustomUser
 from .models import Message
 from asgiref.sync import sync_to_async
 from django.utils import timezone
+from .kafka_producer import KafkaProducerService
+import asyncio
+import functools
+
+
+async def run_in_thread(func, *args, **kwargs):
+    """
+    Run a synchronous function in a separate thread to avoid blocking the event loop.
+
+    Args:
+        func: The synchronous function to run
+        *args: Positional arguments to pass to the function
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        The result of the function call
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, functools.partial(func, *args, **kwargs)
+    )
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -26,6 +45,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
     The consumer uses Django Channels to handle WebSocket connections and groups,
     and interacts with the database using asynchronous methods.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize Kafka producer
+        self.kafka_producer = KafkaProducerService(bootstrap_servers=['192.168.117.128:9094'])
 
     async def connect(self):
         """
@@ -48,7 +72,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             user2 = self.room_name
             print(f"Chat between users: {user1} and {user2}")
 
-           
+
             # تنظيف أسماء المستخدمين لإزالة الأحرف غير المسموح بها
             clean_user1 = ''.join(c for c in user1 if c.isalnum() or c in '-_.')
             clean_user2 = ''.join(c for c in user2 if c.isalnum() or c in '-_.')
@@ -134,6 +158,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'deleted_message_id': delete_message_id
                     }
                 )
+
+                # إرسال إشعار الحذف إلى Kafka
+                await self.send_to_kafka(
+                    action='delete',
+                    sender=sender,
+                    receiver=receiver,
+                    message_id=delete_message_id
+                )
             return
 
         # الحصول على محتوى الرسالة للإرسال أو التحديث
@@ -155,6 +187,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'message_id': message_id
                     }
                 )
+
+                # إرسال التحديث إلى Kafka
+                await self.send_to_kafka(
+                    action='update',
+                    sender=sender,
+                    receiver=receiver,
+                    message_id=message_id,
+                    content=message
+                )
         # حالة إرسال رسالة جديدة
         else:
             # حفظ الرسالة الجديدة في قاعدة البيانات
@@ -170,6 +211,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'message': message,
                     'id': saved_message.id
                 }
+            )
+
+            # إرسال الرسالة الجديدة إلى Kafka
+            await self.send_to_kafka(
+                action='create',
+                sender=sender,
+                receiver=receiver,
+                message_id=saved_message.id,
+                content=message
             )
 
     async def chat_message(self, event):
@@ -235,9 +285,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         delete an existing message in the database.
         """
         try:
-           
+
             message = Message.objects.get(id=message_id, sender=sender, deleted_at__isnull=True)
-            
+
             message.deleted_at = timezone.now()
             message.save(update_fields=['deleted_at'])
             print(f"Soft deleted message ID: {message_id} by sender: {sender.username}")
@@ -245,6 +295,41 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Message.DoesNotExist:
             print(f"Message ID: {message_id} not found or already deleted for sender: {sender.username}")
             return False
+
+    async def send_to_kafka(self, action, sender, receiver, message_id=None, content=None):
+        """
+        Send a message to Kafka asynchronously.
+
+        Args:
+            action (str): The action type ('create', 'update', or 'delete')
+            sender (User): The sender of the message
+            receiver (User): The receiver of the message
+            message_id (int, optional): The ID of the message (for updates and deletes)
+            content (str, optional): The content of the message (for creates and updates)
+        """
+        try:
+            # Prepare the message data
+            message_data = {
+                'action': action,
+                'sender': sender.username,
+                'receiver': receiver.username
+            }
+
+            if message_id is not None:
+                message_data['message_id'] = message_id
+
+            if content is not None:
+                message_data['content'] = content
+
+            # Send the message to Kafka in a separate thread
+            await run_in_thread(
+                self.kafka_producer.send_message,
+                'chat_messages',
+                message_data
+            )
+            print(f"Sent message to Kafka: {message_data}")
+        except Exception as e:
+            print(f"Error sending to Kafka: {str(e)}")
 
     @sync_to_async
     def get_receiver_user(self):
