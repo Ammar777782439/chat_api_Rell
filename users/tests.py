@@ -1,11 +1,6 @@
 from django.test import TestCase, Client  # استيراد أدوات الاختبار حق Django
-from django.urls import reverse  # استيراد reverse علشان نجيب الروابط
 from django.contrib.auth.models import User  # استيراد نموذج المستخدم الأساسي
 from django.contrib.messages import get_messages  # استيراد الرسائل اللي بتظهر للمستخدم
-from rest_framework.test import APIClient  # استيراد APIClient لاختبار الـ API
-from rest_framework import status  # استيراد أكواد حالة الـ HTTP
-from rest_framework.authtoken.models import Token  # استيراد نموذج التوكن
-from social_django.models import UserSocialAuth  # استيراد نموذج المصادقة الاجتماعية
 
 class UserViewsTest(TestCase):
     def setUp(self):
@@ -124,97 +119,4 @@ class UserViewsTest(TestCase):
         self.assertRedirects(response, '/login/')  # لازم يوجهه لصفحة تسجيل الدخول
         self.assertFalse('_auth_user_id' in self.client.session)  # تأكد إنه خرج
 
-    def test_get_auth_token(self):
-        """اختبار الحصول على التوكن حق المصادقة"""
-        api_client = APIClient()  # إنشاء عميل API
-        api_client.force_authenticate(user=self.user)  # مصادقة المستخدم يدويًا
-        response = api_client.get('/api/token/')  # طلب الحصول على التوكن
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('token', response.data)  # تأكد إنه أرسل التوكن
 
-    def test_auto_token_creation(self):
-        """اختبار إنشاء التوكن تلقائيًا عند إنشاء مستخدم جديد"""
-        # إنشاء مستخدم جديد
-        new_user = User.objects.create_user(
-            username='autotoken',
-            email='autotoken@example.com',
-            password='password123'
-        )
-
-        # التحقق من وجود توكن للمستخدم الجديد
-        token_exists = Token.objects.filter(user=new_user).exists()
-        self.assertTrue(token_exists, "لم يتم إنشاء توكن تلقائيًا للمستخدم الجديد")
-
-    def test_obtain_auth_token_api(self):
-        """اختبار نقطة نهاية الحصول على التوكن باستخدام اسم المستخدم وكلمة المرور"""
-        api_client = APIClient()  # إنشاء عميل API
-
-        # اختبار باستخدام اسم المستخدم
-        response = api_client.post('/api/auth/login/', {
-            'username': 'testuser',
-            'password': 'testpassword'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('token', response.data)
-
-        # اختبار باستخدام البريد الإلكتروني
-        response = api_client.post('/api/auth/login/', {
-            'username': 'test@example.com',
-            'password': 'testpassword'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('token', response.data)
-
-        # اختبار بيانات غير صحيحة
-        response = api_client.post('/api/auth/login/', {
-            'username': 'testuser',
-            'password': 'wrongpassword'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertIn('error', response.data)
-
-        # إنشاء مستخدم مصادقة جوجل
-        oauth_user = User.objects.create_user(
-            username='oauth_user',
-            email='oauth@example.com',
-            password='randompassword'
-        )
-
-        # إنشاء سجل مصادقة اجتماعية للمستخدم
-        UserSocialAuth.objects.create(
-            user=oauth_user,
-            provider='google-oauth2',
-            uid='123456789'
-        )
-
-        # اختبار مستخدم جوجل مع علامة OAuth
-        response = api_client.post('/api/auth/login/', {
-            'username': 'oauth_user',
-            'password': '',  # لا تحتاج لكلمة مرور
-            'oauth': 'true'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('token', response.data)
-
-        # اختبار مستخدم جوجل بدون علامة OAuth
-        response = api_client.post('/api/auth/login/', {
-            'username': 'oauth_user',
-            'password': 'randompassword'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertIn('error', response.data)
-
-        # اختبار مستخدم عادي مع علامة OAuth
-        response = api_client.post('/api/auth/login/', {
-            'username': 'testuser',
-            'password': '',
-            'oauth': 'true'
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertIn('error', response.data)

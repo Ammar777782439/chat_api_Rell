@@ -7,9 +7,12 @@ WebSocket connections, message sending/receiving, and database operations.
 
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.contrib.auth.models import User
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+from users.models import CustomUser
 from .models import Message
 from asgiref.sync import sync_to_async
+from django.utils import timezone
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -35,21 +38,45 @@ class ChatConsumer(AsyncWebsocketConsumer):
         The group name is created by sorting and joining the usernames of both users
         to ensure that the same group is used regardless of who initiated the chat.
         """
-        # جلب اسم الغرفة من الرابط
-        self.room_name = self.scope['url_route']['kwargs']['room_name']
+        try:
+            # جلب اسم الغرفة من الرابط
+            self.room_name = self.scope['url_route']['kwargs']['room_name']
+            print(f"WebSocket connecting to room: {self.room_name}")
 
-        # جلب اسم المستخدمين الاثنين
-        user1 = self.scope['user'].username
-        user2 = self.room_name
+            # جلب اسم المستخدمين الاثنين
+            user1 = self.scope['user'].username
+            user2 = self.room_name
+            print(f"Chat between users: {user1} and {user2}")
 
-        # تكوين اسم مجموعة فريد بحيث يكون نفسه بغض النظر عن من بدأ المحادثة
-        self.room_group_name = f"chat_{''.join(sorted([user1, user2]))}"
+           
+            # تنظيف أسماء المستخدمين لإزالة الأحرف غير المسموح بها
+            clean_user1 = ''.join(c for c in user1 if c.isalnum() or c in '-_.')
+            clean_user2 = ''.join(c for c in user2 if c.isalnum() or c in '-_.')
 
-        # إضافة القناة إلى مجموعة الغرفة
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            # التأكد من أن الأسماء المنظفة ليست فارغة
+            if not clean_user1:
+                clean_user1 = "user1"
+            if not clean_user2:
+                clean_user2 = "user2"
 
-        # قبول الاتصال عبر WebSocket
-        await self.accept()
+            self.room_group_name = f"chat_{''.join(sorted([clean_user1, clean_user2]))}"
+            print(f"Group name created: {self.room_group_name}")
+
+            # إضافة القناة إلى مجموعة الغرفة
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            print(f"Added to group: {self.room_group_name}")
+
+            # قبول الاتصال عبر WebSocket
+            await self.accept()
+            print(f"WebSocket connection accepted for {user1} in room {self.room_name}")
+        except Exception as e:
+            print(f"Error in WebSocket connect: {str(e)}")
+            # محاولة قبول الاتصال حتى في حالة الخطأ لتجنب تعليق المتصفح
+            await self.accept()
+            # إرسال رسالة خطأ للعميل
+            await self.send(text_data=json.dumps({
+                'error': f"Connection error: {str(e)}"
+            }))
 
     async def disconnect(self, close_code):
         """
@@ -61,8 +88,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Args:
             close_code: The code indicating why the connection was closed.
         """
-        # إزالة القناة من مجموعة الغرفة عند قطع الاتصال
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        try:
+            # إزالة القناة من مجموعة الغرفة عند قطع الاتصال
+            if hasattr(self, 'room_group_name'):
+                await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+                print(f"Disconnected from group: {self.room_group_name} with code: {close_code}")
+            else:
+                print(f"Disconnected with code: {close_code} (no group name available)")
+        except Exception as e:
+            print(f"Error in disconnect: {str(e)}")
 
     async def receive(self, text_data):
         """
@@ -201,12 +235,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         delete an existing message in the database.
         """
         try:
-            # البحث عن الرسالة والتأكد من ملكية المرسل لها
-            message = Message.objects.get(id=message_id, sender=sender)
-
-            message.delete()
+           
+            message = Message.objects.get(id=message_id, sender=sender, deleted_at__isnull=True)
+            
+            message.deleted_at = timezone.now()
+            message.save(update_fields=['deleted_at'])
+            print(f"Soft deleted message ID: {message_id} by sender: {sender.username}")
             return True
         except Message.DoesNotExist:
+            print(f"Message ID: {message_id} not found or already deleted for sender: {sender.username}")
             return False
 
     @sync_to_async
@@ -215,6 +252,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Get the User object for the receiver.
         """
         try:
-            return User.objects.get(username=self.room_name)
-        except User.DoesNotExist:
+            print(f"Looking for receiver with username: {self.room_name}")
+            receiver = CustomUser.objects.get(username=self.room_name)
+            print(f"Found receiver: {receiver.username} (ID: {receiver.id})")
+            return receiver
+        except CustomUser.DoesNotExist:
+            print(f"Receiver not found: {self.room_name}, using current user as fallback")
+            return self.scope['user']
+        except Exception as e:
+            print(f"Error getting receiver user: {str(e)}")
             return self.scope['user']

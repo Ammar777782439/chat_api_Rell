@@ -1,6 +1,6 @@
 from django.test import TestCase, Client, TransactionTestCase
 from django.urls import reverse
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from chat.models import Message
@@ -17,11 +17,11 @@ class MessageViewSetTest(APITestCase):
         """إعداد البيانات اللي بنستخدمها في الاختبارات"""
 
         # إنشاء مستخدمين للتجربة
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='user1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='user2',
             password='testpass123'
         )
@@ -66,9 +66,15 @@ class MessageViewSetTest(APITestCase):
 
     def test_delete_message(self):
         """اختبار حذف رسالة خاصة بالمستخدم"""
+        # اختبار الحذف الناعم عبر API
         response = self.client.delete(f'/api/messages/{self.message1.id}/delete_message/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Message.objects.count(), 1)  # لازم يتبقى رسالة واحدة فقط
+        # التأكد من أن الرسالة تم حذفها ناعماً (تحديث deleted_at)
+        self.message1.refresh_from_db()
+        self.assertIsNotNone(self.message1.deleted_at)
+        # التأكد من أن الرسالة المحذوفة ناعماً لا تظهر في الاستعلامات العادية
+        response = self.client.get(f'/api/messages/?user={self.user2.username}')
+        self.assertEqual(len(response.data['results']), 1) # يجب أن تظهر رسالة واحدة فقط (message2)
 
     def test_delete_others_message(self):
         """اختبار محاولة حذف رسالة لشخص ثاني (المفروض يرفض)"""
@@ -94,11 +100,11 @@ class ChatRoomViewTest(TestCase):
         """إعداد بيانات الاختبار الخاصة بغرف الدردشة"""
 
         # إنشاء مستخدمين للتجربة
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='user1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='user2',
             password='testpass123'
         )
@@ -137,11 +143,11 @@ class MessageModelTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='testuser1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='testuser2',
             password='testpass123'
         )
@@ -169,11 +175,11 @@ class MessageSerializerTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.user1 = User.objects.create_user(
+        self.user1 = CustomUser.objects.create_user(
             username='testuser1',
             password='testpass123'
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = CustomUser.objects.create_user(
             username='testuser2',
             password='testpass123'
         )
@@ -212,7 +218,7 @@ class WebSocketTests(TransactionTestCase):
 
     @database_sync_to_async
     def create_user(self, username, password):
-        return User.objects.create_user(username=username, password=password)
+        return CustomUser.objects.create_user(username=username, password=password)
 
     @database_sync_to_async
     def create_message(self, sender, receiver, content):
@@ -223,8 +229,15 @@ class WebSocketTests(TransactionTestCase):
         return Message.objects.get(id=message_id)
 
     @database_sync_to_async
-    def count_messages(self):
-        return Message.objects.count()
+    def count_messages(self, include_deleted=False):
+        if include_deleted:
+            return Message.objects.count()
+        return Message.objects.filter(deleted_at__isnull=True).count()
+
+    @database_sync_to_async
+    def get_message_with_deleted(self, message_id):
+        # جلب الرسالة حتى لو كانت محذوفة ناعماً
+        return Message.objects.get(id=message_id)
 
     async def test_websocket_connect(self):
         """Test WebSocket connection"""
@@ -362,8 +375,12 @@ class WebSocketTests(TransactionTestCase):
         # Check the response
         self.assertEqual(response['deleted_message_id'], message.id)
 
-        # Check that the message was deleted from the database
-        new_count = await self.count_messages()
+        # Check that the message was soft-deleted in the database
+        deleted_message = await self.get_message_with_deleted(message.id)
+        self.assertIsNotNone(deleted_message.deleted_at)
+
+        # Check that the count of non-deleted messages decreased
+        new_count = await self.count_messages() # Counts only non-deleted by default
         self.assertEqual(new_count, initial_count - 1)
 
         # Disconnect

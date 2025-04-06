@@ -1,64 +1,93 @@
+{% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Chat App{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    {% block extra_css %}{% endblock %}
+    <title>دردشة مباشرة</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <style>
+        .messages-container {
+            height: 70vh;
+            overflow-y: auto;
+        }
+        .message-bubble {
+            max-width: 70%;
+            border-radius: 1.25rem;
+        }
+        .own-message {
+            background-color: #007bff;
+            color: white;
+        }
+        .other-message {
+            background-color: #e9ecef;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <nav class="bg-white shadow-lg">
-        <div class="max-w-6xl mx-auto px-4">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
-                    {% comment %} <a href="{% url 'chat' %}" class="text-xl font-bold text-gray-800">
-                        <i class="fas fa-comments text-blue-500 mr-2"></i>Chat App
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">دردشة مباشرة</a>
+            <div class="d-flex">
+                {% comment %} <div id="authButtons">
+                    <!-- سيتم تحديث هذا القسم بواسطة JavaScript -->
+                    <a href="{% url 'google_login' %}" class="btn btn-light">
+                        <img src="https://img.icons8.com/color/16/000000/google-logo.png" alt="Google">
+                        تسجيل الدخول عبر Google
                     </a> {% endcomment %}
-                </div>
-                <div class="flex items-center space-x-4">
-                    {% if user.is_authenticated %}
-                        <span class="text-gray-600">Welcome, {{ user.username }}</span>
-                        <a href="{% url 'logout' %}" 
-                           class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
-                           onclick="event.preventDefault(); 
-                                    document.getElementById('logout-form').submit();">
-                            Logout
-                        </a>
-                        <form id="logout-form" action="{% url 'logout' %}" method="POST" style="display: none;">
-                            {% csrf_token %}
-                        </form>
-                    {% else %}
-                        <a href="{% url 'login' %}" class="text-gray-600 hover:text-gray-800">Login</a>
-                        <a href="{% url 'register' %}" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
-                            Register
-                        </a>
-                    {% endif %}
                 </div>
             </div>
         </div>
     </nav>
 
-    <main class="container mx-auto px-4 py-8">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="mb-4 p-4 rounded-lg {% if message.tags == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-        
-        {% block content %}{% endblock %}
+    <main class="container mt-4">
+        {% block content %}
+        {% endblock %}
     </main>
 
-    <footer class="bg-white shadow-lg mt-8">
-        <div class="container mx-auto px-4 py-4">
-            <p class="text-center text-gray-600">&copy; 2025 Chat App. All rights reserved.</p>
-        </div>
-    </footer>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    {% block extra_js %}{% endblock %}
+    <!-- Custom JS -->
+    <script>
+        // التحقق من حالة تسجيل الدخول وإظهار الزر المناسب
+        function updateAuthButtons() {
+            const accessToken = localStorage.getItem('access_token');
+            const authButtonsDiv = document.getElementById('authButtons');
+
+            if (accessToken) {
+                // المستخدم مسجل دخوله
+                authButtonsDiv.innerHTML = `
+                    <button id="logoutBtn" class="btn btn-light">تسجيل الخروج</button>
+                `;
+
+                // إضافة حدث النقر لزر تسجيل الخروج
+                document.getElementById('logoutBtn').addEventListener('click', function() {
+                    // حذف رموز JWT من localStorage
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('refresh_token');
+
+                    // إعادة توجيه المستخدم إلى صفحة تسجيل الدخول
+                    window.location.href = '/users/login/';
+                });
+            } else {
+                // المستخدم غير مسجل دخوله
+                authButtonsDiv.innerHTML = `
+                    <a href="/users/login/" class="btn btn-light">
+                        <img src="https://img.icons8.com/color/16/000000/google-logo.png" alt="Google">
+                        تسجيل الدخول عبر Google
+                    </a>
+                `;
+            }
+        }
+
+        // تنفيذ الدالة عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', updateAuthButtons);
+
+    </script>
 </body>
 </html>
-

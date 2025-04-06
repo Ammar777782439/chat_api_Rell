@@ -1,11 +1,10 @@
 import random
 from datetime import timedelta
 from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from django.utils import timezone
 from chat.models import Message
 from faker import Faker
-from rest_framework.authtoken.models import Token
 
 class Command(BaseCommand):
     help = 'Creates dummy users and messages for testing'
@@ -25,7 +24,7 @@ class Command(BaseCommand):
         if clear_data:
             self.stdout.write(self.style.WARNING('Clearing existing data...'))
             # Only delete non-superuser accounts
-            User.objects.filter(is_superuser=False).delete()
+            CustomUser.objects.filter(is_superuser=False).delete()
             Message.objects.all().delete()
             self.stdout.write(self.style.SUCCESS('Existing data cleared!'))
 
@@ -34,26 +33,17 @@ class Command(BaseCommand):
         users = []
 
         # Check if admin user exists, if not create one
-        if not User.objects.filter(username='admin').exists():
-            admin = User.objects.create_superuser(
+        if not CustomUser.objects.filter(username='admin').exists():
+            admin = CustomUser.objects.create_superuser(
                 username='admin',
                 email='admin@example.com',
                 password='admin123'
             )
-            # Create token for admin user
-            token, created = Token.objects.get_or_create(user=admin)
             users.append(admin)
             self.stdout.write(self.style.SUCCESS(f'Created admin user: admin / admin123'))
-            self.stdout.write(self.style.SUCCESS(f'Created token for admin: {token.key}'))
         else:
-            admin = User.objects.get(username='admin')
-            # Create or get token for existing admin
-            token, created = Token.objects.get_or_create(user=admin)
+            admin = CustomUser.objects.get(username='admin')
             users.append(admin)
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created token for admin: {token.key}'))
-            else:
-                self.stdout.write(self.style.SUCCESS(f'Using existing token for admin: {token.key}'))
 
         # Create regular users
         for i in range(num_users):
@@ -61,26 +51,23 @@ class Command(BaseCommand):
             last_name = fake.last_name()
             username = f"{first_name.lower()}{i}"
 
-            if not User.objects.filter(username=username).exists():
-                user = User.objects.create_user(
+            if not CustomUser.objects.filter(username=username).exists():
+                user = CustomUser.objects.create_user(
                     username=username,
                     email=f"{username}@example.com",
                     password="123",
                     first_name=first_name,
                     last_name=last_name
                 )
-                # Create token for user
-                token, created = Token.objects.get_or_create(user=user)
                 users.append(user)
                 self.stdout.write(self.style.SUCCESS(f'Created user: {username} / 123'))
-                self.stdout.write(self.style.SUCCESS(f'Created token for {username}: {token.key}'))
 
         # Create messages
         self.stdout.write(self.style.NOTICE(f'Creating {num_messages} dummy messages...'))
 
         # Get all users if we need more than the ones we just created
         if len(users) < 2:
-            users = list(User.objects.all())
+            users = list(CustomUser.objects.all())
 
         now = timezone.now()
 
@@ -119,5 +106,4 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('You can login with any of these accounts:'))
         self.stdout.write(self.style.NOTICE('Admin: admin / admin123'))
         self.stdout.write(self.style.NOTICE('Users: [username] / password123'))
-        self.stdout.write(self.style.NOTICE('Authentication tokens have been created for all users'))
-        self.stdout.write(self.style.NOTICE('You can view your token at: http://127.0.0.1:8000/api/token/ after login'))
+

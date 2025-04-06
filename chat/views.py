@@ -9,7 +9,7 @@ The views handle user authentication, message filtering, pagination, and WebSock
 
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
+from users.models import CustomUser
 from django.http import JsonResponse
 from django.db.models import Q
 from django.utils import timezone
@@ -19,13 +19,31 @@ from rest_framework import serializers
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics, permissions, pagination
 from rest_framework.decorators import action
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from chat.serializers import MessageSerializer
 from .models import Message
+
+# def home_view(request):
+#     # Check if access token is in URL parameters
+#     access_token = request.GET.get('access_token')
+#     refresh_token = request.GET.get('refresh_token')
+
+#     # If tokens are present, store them in session
+#     if access_token and refresh_token:
+#         request.session['access_token'] = access_token
+#         request.session['refresh_token'] = refresh_token
+
+#     # Get messages
+#     messages = Message.objects.filter(deleted_at__isnull=True).order_by('-created_at')[:50]
+
+#     # We don't check authentication here anymore since we're using client-side auth check
+#     # The JavaScript in the template will handle redirecting unauthenticated users
+
+#     return render(request, 'chat.html', {'messages': messages})
 
 # نمط التصميم facory
 class MessagePagination(PageNumberPagination):
@@ -58,11 +76,22 @@ class MessageViewSet(viewsets.ModelViewSet):
         serializer_class: The serializer class used for message serialization/deserialization.
         permission_classes: List of permission classes that restrict access to authenticated users.
         pagination_class: The pagination class used for paginating message lists.
+
+    API Endpoints:
+        GET /api/messages/: List all messages for the current user (paginated, 10 per page).
+            - Can filter by user with query parameter: ?user=username
+            - Can paginate with query parameter: ?page=2
+        POST /api/messages/: Create a new message.
+            - Required fields: receiver (user ID), content (message text)
+        GET /api/messages/{id}/: Retrieve a specific message by ID.
+        PUT /api/messages/{id}/: Update a specific message (only allowed for sender).
+        DELETE /api/messages/{id}/: Delete a specific message (only allowed for sender).
+        POST /api/messages/{id}/update_message/: Custom endpoint to update message content.
+        DELETE /api/messages/{id}/delete_message/: Custom endpoint to delete a message.
     """
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = MessagePagination
-    authentication_classes = [TokenAuthentication, SessionAuthentication]
 
     def get_queryset(self):
         """
@@ -78,9 +107,10 @@ class MessageViewSet(viewsets.ModelViewSet):
         user = self.request.user
         other_user = self.request.query_params.get('user', None)
 
-        # Base queryset: all messages where the current user is sender or receiver
+        # Base queryset: all non-soft-deleted messages where the current user is sender or receiver
         queryset = Message.objects.filter(
-            (Q(sender=user) | Q(receiver=user))
+            (Q(sender=user) | Q(receiver=user)),
+            deleted_at__isnull=True  # Filter out soft-deleted messages
         ).order_by('-timestamp')
 
         # Additional filtering by other user if specified
@@ -109,9 +139,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         receiver_username = self.request.data.get('receiver')
 
         try:
-            receiver = User.objects.get(id=receiver_username)
+            receiver = CustomUser.objects.get(id=receiver_username)
             serializer.save(sender=self.request.user, receiver=receiver)
-        except User.DoesNotExist:
+        except CustomUser.DoesNotExist:
             raise serializers.ValidationError("Receiver not found")
 
     @action(detail=True, methods=['delete'])
@@ -135,8 +165,13 @@ class MessageViewSet(viewsets.ModelViewSet):
         if message.sender != request.user:
             return Response({"error": "You can only delete your own messages"}, status=status.HTTP_403_FORBIDDEN)
 
-        # Delete the message
-        message.delete()
+        # Check if the message is already soft-deleted
+        if message.deleted_at:
+            return Response({"error": "Message already deleted"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Perform soft delete
+        message.deleted_at = timezone.now()
+        message.save(update_fields=['deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'])
@@ -196,12 +231,13 @@ def chat_room(request, room_name):
     search_query = request.GET.get('search', '')
 
     # Get all users except the current user for the sidebar
-    users = User.objects.exclude(id=request.user.id)
+    users = CustomUser.objects.exclude(id=request.user.id)
 
-    # Get messages between the current user and the specified user
+    # Get non-soft-deleted messages between the current user and the specified user
     chats = Message.objects.filter(
         (Q(sender=request.user) & Q(receiver__username=room_name)) |
-        (Q(receiver=request.user) & Q(sender__username=room_name))
+        (Q(receiver=request.user) & Q(sender__username=room_name)),
+        deleted_at__isnull=True  # Filter out soft-deleted messages
     )
 
     # Filter messages by search query if provided
@@ -217,11 +253,12 @@ def chat_room(request, room_name):
     # Use a minimum datetime for users with no messages
     min_datetime = timezone.now().replace(year=1, month=1, day=1)
 
-    # For each user, find the most recent message between them and the current user
+    # For each user, find the most recent non-soft-deleted message between them and the current user
     for user in users:
         last_message = Message.objects.filter(
             (Q(sender=request.user) & Q(receiver=user)) |
-            (Q(receiver=request.user) & Q(sender=user))
+            (Q(receiver=request.user) & Q(sender=user)),
+            deleted_at__isnull=True  # Filter out soft-deleted messages
         ).order_by('-timestamp').first()
 
         # Add user and their last message to the list
@@ -247,8 +284,3 @@ def chat_room(request, room_name):
         'search_query': search_query,
         'slug': room_name  # Add slug variable for WebSocket connection
     })
-
-
-
-
-
