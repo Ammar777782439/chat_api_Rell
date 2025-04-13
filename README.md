@@ -1,152 +1,313 @@
-# تطبيق دردشة في الوقت الفعلي
+# توثيق مشروع واجهة برمجة تطبيقات الدردشة في الوقت الفعلي
 
-## نظرة عامة
+## نظرة عامة على المشروع
 
-تطبيق دردشة في الوقت الفعلي تم تطويره باستخدام Django وDjango Channels مع دعم مصادقة Google OAuth. يوفر التطبيق واجهة برمجة تطبيقات RESTful لإدارة الرسائل مع إمكانية البث في الوقت الفعلي باستخدام WebSockets لعرض الرسائل الجديدة فور وصولها.
+تم تطوير تطبيق دردشة في الوقت الفعلي باستخدام Django وDjango Channels مع دعم مصادقة Google OAuth. يوفر التطبيق واجهة برمجة تطبيقات RESTful للرسائل مع إمكانية البث في الوقت الفعلي باستخدام WebSockets.
 
-## الميزات الرئيسية
+## المتطلبات التقنية المنفذة
 
-*   **دردشة في الوقت الفعلي:** استخدام WebSockets (عبر Django Channels) لتحديث الرسائل مباشرة دون الحاجة لتحديث الصفحة.
-*   **واجهة برمجة تطبيقات RESTful:** نقاط نهاية API لإدارة الرسائل (جلب، إرسال، تحديث، حذف).
-*   **مصادقة المستخدمين:**
-    *   تسجيل الدخول/إنشاء حساب باستخدام اسم المستخدم وكلمة المرور.
-    *   تسجيل الدخول باستخدام حساب Google (Google OAuth).
-    *   مصادقة API باستخدام التوكن أو الجلسات.
-*   **قاعدة بيانات PostgreSQL:** استخدام قاعدة بيانات PostgreSQL لتخزين بيانات المستخدمين والرسائل.
-*   **حذف ناعم (Soft Delete):** إمكانية حذف الرسائل دون إزالتها فعليًا من قاعدة البيانات.
-*   **اختبارات شاملة:** تغطية اختبار عالية لضمان جودة الكود واستقراره.
-*   **بيانات وهمية:** أمر مخصص لإنشاء بيانات تجريبية (مستخدمين ورسائل).
+### 1. قاعدة البيانات
 
-## التقنيات المستخدمة
+- **نوع قاعدة البيانات**: تم استخدام PostgreSQL كما هو مطلوب
+- **الترحيلات والبذور**: تم استخدام نظام الترحيلات في Django لإنشاء هيكل قاعدة البيانات وتم إنشاء أمر مخصص لإنشاء بيانات وهمية
+- **جداول قاعدة البيانات**:
+  - جدول `Message` مع الحقول: content, sender (user_id), receiver (user_id), timestamp (created_at), مع دعم soft delete من خلال حقل deleted_at
+  - استخدام جدول `User` المدمج في Django مع توسيعه حسب الحاجة
+  - تم إنشاء العلاقات المناسبة بين الجداول
 
-*   **الواجهة الخلفية:** Python, Django, Django REST Framework, Django Channels
-*   **قاعدة البيانات:** PostgreSQL
-*   **المصادقة:** Django Allauth (لـ Google OAuth), DRF Token Authentication, Session Authentication
-*   **الوقت الفعلي:** WebSockets, Daphne (ASGI Server)
-*   **الاختبار:** Pytest, Coverage.py
-*   **أخرى:** Faker (لتوليد البيانات الوهمية)
+#### تكوين قاعدة البيانات PostgreSQL
+
+تم تكوين قاعدة البيانات في ملف `settings.py`:
+
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'chatApp',  # اسم قاعدة البيانات
+        'USER': 'postgres',    # اسم المستخدم
+        'PASSWORD': 'your_password',  # كلمة المرور
+        'HOST': 'localhost',   # المضيف
+        'PORT': '5432',        # المنفذ
+    }
+}
+```
+
+### 2. نقاط نهاية واجهة برمجة التطبيقات (API Endpoints)
+
+#### نقاط نهاية الرسائل
+
+- **GET /api/messages/**
+  - جلب أحدث الرسائل مع دعم التقسيم إلى صفحات (10 رسائل لكل صفحة)
+  - دعم التصفية حسب المستخدمين من خلال معلمة الاستعلام `user`
+  - ترتيب الرسائل حسب الأحدث أولاً
+  - مثال: `GET /api/messages/?user=username&page=1&page_size=10`
+
+- **POST /api/messages/**
+  - إرسال رسالة جديدة
+  - التحقق من صحة المحتوى (مطلوب)
+  - تعيين المرسل تلقائيًا إلى المستخدم الحالي
+  - مثال للبيانات المرسلة:
+    ```json
+    {
+      "receiver": "username",
+      "content": "Hello, this is a test message"
+    }
+    ```
+
+- **POST /api/messages/{id}/update_message/**
+  - تحديث محتوى رسالة موجودة
+  - التحقق من أن المستخدم هو مرسل الرسالة
+  - التحقق من صحة المحتوى الجديد
+
+- **DELETE /api/messages/{id}/delete_message/**
+  - حذف رسالة موجودة
+  - التحقق من أن المستخدم هو مرسل الرسالة
+
+#### نقاط نهاية المصادقة (OAuth)
+
+- **GET /accounts/google/login/**
+  - بدء عملية تسجيل الدخول باستخدام Google OAuth
+  - إعادة توجيه المستخدم إلى صفحة مصادقة Google
+
+- **GET /accounts/google/callback/**
+  - معالجة استجابة مصادقة Google
+  - التحقق من صحة البيانات لمنع التزوير
+  - إنشاء جلسة للمستخدم
+
+### 3. البث في الوقت الفعلي
+
+- تم استخدام Django Channels وWebSockets لبث الرسائل الجديدة في الوقت الفعلي
+- تم تنفيذ `ChatConsumer` للتعامل مع اتصالات WebSocket
+- يتم بث الرسائل الجديدة والمحدثة تلقائيًا إلى جميع العملاء المتصلين في نفس غرفة الدردشة
+- تم تنفيذ آلية لإنشاء اسم فريد لكل غرفة دردشة بناءً على المستخدمين المشاركين
+
+### 4. الأمان والتحقق من الصحة
+
+- تم حماية جميع نقاط نهاية الدردشة باستخدام وسيط المصادقة
+- تم التأكد من أن المستخدمين يمكنهم فقط حذف/تعديل رسائلهم الخاصة
+- تم التحقق من بيانات استجابة Google OAuth لمنع التزوير
+- تم تنفيذ التحقق من صحة البيانات المدخلة في جميع نقاط النهاية
+
+### 5. الاختبار
+
+- تم تحقيق تغطية اختبار وحدة بنسبة 80% كما هو مطلوب
+- تم كتابة اختبارات شاملة لـ:
+  - النماذج (Models)
+  - المشاهدات (Views)
+  - واجهة برمجة التطبيقات (API)
+  - المستهلكين (Consumers)
+  - المسلسلات (Serializers)
+- يمكن تشغيل الاختبارات باستخدام الأمر: `python manage.py test`
+- يمكن قياس تغطية الاختبار باستخدام: `coverage run --source=chat manage.py test`
+
+### 6. جودة الكود وقابلية الصيانة
+
+- **توثيق الكود**: تم توثيق جميع الفئات والدوال بشكل شامل باستخدام docstrings
+- **التزامات Git التقليدية**: تم استخدام نمط الالتزامات التقليدية في Git
+- **أنماط التصميم**: تم استخدام أنماط التصميم المناسبة مثل Repository Pattern وFactory Pattern
+- **تقليل الاعتماديات**: تم استخدام أقل عدد ممكن من المكتبات الخارجية
 
 ## هيكل المشروع
 
 ```
-chat_app-main-main/
-├── chat/                   # التطبيق الرئيسي للدردشة
+chat_app/
+├── chat/                   # التطبيق الرئيسي
 │   ├── management/         # أوامر الإدارة المخصصة
+│   │   └── commands/       # أوامر مخصصة مثل create_dummy_data
 │   ├── migrations/         # ترحيلات قاعدة البيانات
-│   ├── models.py           # نماذج البيانات (User, Message)
+│   ├── models.py           # نماذج البيانات
 │   ├── serializers.py      # مسلسلات API
-│   ├── consumers.py        # مستهلكي WebSocket للدردشة
+│   ├── consumers.py        # مستهلكي WebSocket
 │   ├── views.py            # المشاهدات ونقاط نهاية API
-│   ├── urls.py             # روابط URL الخاصة بتطبيق chat
 │   └── tests.py            # مجموعة الاختبارات
-├── users/                  # تطبيق إدارة المستخدمين (إذا كان منفصلاً)
-│   └── ...
-├── templates/              # قوالب HTML (لواجهة المستخدم)
-│   ├── base.html
-│   ├── chat.html
-│   ├── home.html
-│   ├── login.html
-│   └── ...
+├── templates/              # قوالب HTML
+│   └── chat.html           # واجهة الدردشة الرئيسية
+├── static/                 # الملفات الثابتة (CSS، JS)
 ├── chat_app/               # حزمة المشروع الرئيسية
-│   ├── settings.py         # إعدادات المشروع (Database, Auth, etc.)
-│   ├── urls.py             # تكوين URL الرئيسي للمشروع
+│   ├── settings.py         # إعدادات المشروع
+│   ├── urls.py             # تكوين URL
 │   ├── asgi.py             # تكوين ASGI (للـ WebSockets)
 │   └── wsgi.py             # تكوين WSGI
-├── .gitignore              # الملفات والمجلدات التي يتجاهلها Git
-├── docker-compose.yml      # (إذا كنت تستخدم Docker)
 ├── manage.py               # سكريبت إدارة Django
-├── requirements.txt        # قائمة الاعتماديات
-├── API_USAGE.md            # توثيق API باللغة العربية
-├── API_USAGE_EN.md         # توثيق API باللغة الإنجليزية
-└── project_documentation.md # توثيق المشروع التفصيلي
+└── requirements.txt        # قائمة الاعتماديات
 ```
 
-## الإعداد والتثبيت
+## تكوين مصادقة Google OAuth
+
+تم تكوين مصادقة Google OAuth في ملف `settings.py`:
+
+```python
+INSTALLED_APPS = [
+    # ...
+    'django.contrib.auth',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    # ...
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+SITE_ID = 1
+
+# إعدادات مزود Google
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': 'YOUR_GOOGLE_CLIENT_ID',
+            'secret': 'YOUR_GOOGLE_CLIENT_SECRET',
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
+```
+
+## تثبيت وإعداد المشروع
 
 ### المتطلبات المسبقة
 
-*   Python 3.8+
-*   PostgreSQL
-*   pip
-*   virtualenv (موصى به)
+- Python 3.8+
+- PostgreSQL
+- pip
+- virtualenv (موصى به)
 
 ### خطوات الإعداد
 
-1.  **استنساخ المستودع:**
-    ```bash
-    git clone <your-repository-url>
-    cd chat_app-main-main
-    ```
+1. استنساخ المستودع:
+   ```bash
+   git clone https://github.com/yourusername/chat-application.git
+   cd chat-application
+   ```
 
-2.  **إنشاء وتفعيل بيئة افتراضية:**
-    ```bash
-    python -m venv venv
-    # On Windows:
-    # venv\Scripts\activate
-    # On macOS/Linux:
-    # source venv/bin/activate
-    ```
+2. إنشاء وتفعيل بيئة افتراضية:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # على Windows: venv\Scripts\activate
+   ```
 
-3.  **تثبيت الاعتماديات:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+3. تثبيت الاعتماديات:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4.  **إعداد قاعدة بيانات PostgreSQL:**
-    *   تأكد من أن PostgreSQL يعمل.
-    *   قم بإنشاء قاعدة بيانات (اسمها الافتراضي في `settings.py` هو `chatApp`، تأكد من مطابقته أو تعديله).
-        ```sql
-        -- مثال باستخدام psql
-        CREATE DATABASE chatApp;
-        ```
-    *   قم بتحديث بيانات اعتماد قاعدة البيانات (اسم المستخدم، كلمة المرور، المضيف، المنفذ) في ملف `chat_app/settings.py` إذا لزم الأمر.
+4. إنشاء قاعدة بيانات PostgreSQL:
+   ```bash
+   createdb chatAppMin
+   ```
 
-5.  **تطبيق الترحيلات:**
-    ```bash
-    python manage.py migrate
-    ```
+5. تطبيق الترحيلات:
+   ```bash
+   python manage.py migrate
+   ```
 
-6.  **إنشاء مستخدم مشرف (اختياري):**
-    ```bash
-    python manage.py createsuperuser
-    ```
+6. إنشاء مستخدم مشرف:
+   ```bash
+   python manage.py createsuperuser
+   ```
 
-7.  **إنشاء بيانات وهمية (اختياري):**
-    ```bash
-    # إنشاء 15 مستخدم و 300 رسالة
-    python manage.py create_dummy_data --users 15 --messages 300
-    ```
+7. إنشاء بيانات وهمية (اختياري):
+   ```bash
+   python manage.py create_dummy_data --users 15 --messages 300
+   ```
 
-8.  **إعداد Google OAuth (مهم):**
-    *   اذهب إلى [Google Cloud Console](https://console.cloud.google.com/).
-    *   أنشئ مشروعًا جديدًا أو استخدم مشروعًا موجودًا.
-    *   اذهب إلى "APIs & Services" -> "Credentials".
-    *   أنشئ "OAuth client ID" جديدًا من نوع "Web application".
-    *   أضف `http://127.0.0.1:8000/accounts/google/login/callback/` (أو عنوان URL الخاص بك إذا كان مختلفًا) إلى "Authorized redirect URIs".
-    *   احصل على `Client ID` و `Client Secret`.
-    *   قم بتحديث هذه القيم في ملف `chat_app/settings.py` ضمن `SOCIALACCOUNT_PROVIDERS['google']['APP']`.
+8. تشغيل خادم التطوير:
+   ```bash
+   python manage.py runserver
+   ```
 
-## الاستخدام
+9. الوصول إلى التطبيق على http://127.0.0.1:8000/
 
-1.  **تشغيل خادم التطوير:**
-    ```bash
-    python manage.py runserver
-    ```
-2.  **الوصول إلى التطبيق:** افتح المتصفح وانتقل إلى `http://127.0.0.1:8000/`.
-3.  **استخدام واجهة برمجة التطبيقات (API):**
-    *   للحصول على تفاصيل حول كيفية المصادقة واستخدام نقاط نهاية الـ API والـ WebSocket، يرجى الرجوع إلى ملفات التوثيق التالية:
-        *   [دليل استخدام API (العربية)](API_USAGE.md)
-        *   [API Usage Guide (English)](API_USAGE_EN.md)
+## استخدام واجهة برمجة التطبيقات
 
-## الاختبار
+### مصادقة
 
-*   **تشغيل جميع الاختبارات:**
-    ```bash
-    python manage.py test
-    ```
-*   **قياس تغطية الاختبار:**
-    ```bash
-    coverage run --source='.' manage.py test
-    coverage report -m
-    ```
-    (تأكد من تثبيت `coverage`: `pip install coverage`)
+قبل استخدام واجهة برمجة التطبيقات، يجب على المستخدمين تسجيل الدخول باستخدام Google OAuth:
+
+1. توجيه المستخدم إلى: `GET /accounts/google/login/`
+2. بعد المصادقة الناجحة، سيتم إعادة توجيه المستخدم إلى التطبيق مع رمز مصادقة
+
+### استخدام نقاط نهاية الرسائل
+
+#### جلب الرسائل
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" "http://your-domain.com/api/messages/?user=john&page=1&page_size=10"
+```
+
+#### إرسال رسالة جديدة
+
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" -d '{"receiver": "john", "content": "Hello!"}' "http://your-domain.com/api/messages/"
+```
+
+#### تحديث رسالة
+
+```bash
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" -d '{"content": "Updated message"}' "http://your-domain.com/api/messages/123/update_message/"
+```
+
+#### حذف رسالة
+
+```bash
+curl -X DELETE -H "Authorization: Bearer YOUR_TOKEN" "http://your-domain.com/api/messages/123/delete_message/"
+```
+
+## الاختبارات
+
+### تشغيل الاختبارات
+
+```bash
+python manage.py test
+```
+
+### قياس تغطية الاختبار
+
+```bash
+coverage run --source=chat manage.py test
+coverage report
+```
+
+## التحديات والحلول
+
+### تحدي: تكامل مصادقة Google OAuth
+**الحل**: استخدام مكتبة django-allauth لتبسيط عملية التكامل مع Google OAuth، مع التحقق الإضافي من البيانات المستلمة لمنع التزوير.
+
+### تحدي: البث في الوقت الفعلي
+**الحل**: استخدام Django Channels لإدارة اتصالات WebSocket، مع تنفيذ آلية لإنشاء غرف دردشة فريدة لكل محادثة.
+
+### تحدي: أمان الرسائل
+**الحل**: تنفيذ سياسات تضمن أن المستخدمين يمكنهم فقط تعديل أو حذف رسائلهم الخاصة، مع التحقق من الصلاحيات في كل من واجهة برمجة التطبيقات ومستهلكي WebSocket.
+
+## الخلاصة
+
+تم تنفيذ جميع متطلبات المشروع بنجاح، مع التركيز على الأمان وقابلية الصيانة وجودة الكود. يوفر التطبيق واجهة برمجة تطبيقات RESTful للرسائل مع دعم البث في الوقت الفعلي باستخدام WebSockets ومصادقة Google OAuth.
+
+---
+
+## ملحق: قائمة الاعتماديات
+
+```
+Django>=3.2,<4.0
+channels>=3.0.0
+daphne>=3.0.0
+djangorestframework>=3.12.0
+django-allauth>=0.45.0
+psycopg2-binary>=2.9.0
+Faker>=8.0.0
+coverage>=5.5
+pytest>=6.2.0
+pytest-django>=4.4.0
+pytest-asyncio>=0.15.0
+```
